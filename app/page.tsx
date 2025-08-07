@@ -5,7 +5,7 @@ import type React from "react"
 import { useState, useRef, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Send, Bot, User, Sparkles } from "lucide-react"
+import { Send, Bot, User, Sparkles } from 'lucide-react'
 import Image from "next/image"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
@@ -30,6 +30,7 @@ export default function ChatBot() {
   const [isLoading, setIsLoading] = useState(false)
   const [isTyping, setIsTyping] = useState(false)
   const [hasStartedChat, setHasStartedChat] = useState(false)
+  const [threadId, setThreadId] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   const scrollToBottom = () => {
@@ -64,12 +65,21 @@ export default function ChatBot() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ message: messageText }),
+        body: JSON.stringify({ 
+          message: messageText,
+          threadId: threadId // Send existing threadId or null for first message
+        }),
       })
 
       const data = await response.json()
 
       if (response.ok) {
+        // Store the threadId from the response (will be set on first message)
+        if (data.threadId && !threadId) {
+          setThreadId(data.threadId)
+          console.log("Thread ID set:", data.threadId)
+        }
+
         const assistantMessage: Message = {
           id: (Date.now() + 1).toString(),
           content: data.response,
