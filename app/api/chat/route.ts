@@ -4,7 +4,7 @@ export const runtime = "nodejs"
 
 export async function POST(req: NextRequest) {
   try {
-    const { message } = await req.json()
+    const { message, threadId } = await req.json()
 
     const apiKey = process.env.OPENAI_API_KEY
     const assistantId = process.env.OPENAI_ASSISTANT_ID
@@ -19,22 +19,30 @@ export async function POST(req: NextRequest) {
 
     console.log("Generating response with assistant:", assistantId)
 
-    // Create a new thread using fetch
-    const threadResponse = await fetch("https://api.openai.com/v1/threads", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-        "OpenAI-Beta": "assistants=v2",
-      },
-    })
+    let currentThreadId = threadId
 
-    if (!threadResponse.ok) {
-      throw new Error(`Failed to create thread: ${threadResponse.statusText}`)
+    // Create a new thread only if threadId is not provided (first message)
+    if (!currentThreadId) {
+      console.log("Creating new thread...")
+      const threadResponse = await fetch("https://api.openai.com/v1/threads", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+          "OpenAI-Beta": "assistants=v2",
+        },
+      })
+
+      if (!threadResponse.ok) {
+        throw new Error(`Failed to create thread: ${threadResponse.statusText}`)
+      }
+
+      const thread = await threadResponse.json()
+      currentThreadId = thread.id
+      console.log("Created new thread:", currentThreadId)
+    } else {
+      console.log("Using existing thread:", currentThreadId)
     }
-
-    const thread = await threadResponse.json()
-    const threadId = thread.id
 
     // Construct the message content
     const userMessage = message || "Hello, I need help with babysitting services"
@@ -47,7 +55,7 @@ export async function POST(req: NextRequest) {
     ]
 
     // Add message to thread
-    const messageResponse = await fetch(`https://api.openai.com/v1/threads/${threadId}/messages`, {
+    const messageResponse = await fetch(`https://api.openai.com/v1/threads/${currentThreadId}/messages`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -67,7 +75,7 @@ export async function POST(req: NextRequest) {
     console.log("Message added to thread")
 
     // Create and run the assistant
-    const runResponse = await fetch(`https://api.openai.com/v1/threads/${threadId}/runs`, {
+    const runResponse = await fetch(`https://api.openai.com/v1/threads/${currentThreadId}/runs`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -146,11 +154,15 @@ export async function POST(req: NextRequest) {
     }
 
     // Call the function to get the response
-    const response = await checkStatusAndGetResponse(threadId, runId)
+    const response = await checkStatusAndGetResponse(currentThreadId, runId)
 
     console.log("Generated response:", response)
 
-    return NextResponse.json({ response })
+    // Return both the response and the threadId
+    return NextResponse.json({ 
+      response,
+      threadId: currentThreadId 
+    })
   } catch (error) {
     console.error("Chat API error:", error)
     return NextResponse.json(
